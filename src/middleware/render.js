@@ -85,11 +85,7 @@ module.exports = function (middleware) {
 				options._locals = undefined;
 
 				if (res.locals.isAPI) {
-					if (req.route && req.route.path === '/api/') {
-						options.title = '[[pages:home]]';
-					}
-					req.app.set('json spaces', global.env === 'development' || req.query.pretty ? 4 : 0);
-					return res.json(options);
+					checkAPI(req, options, res)
 				}
 				const optionsString = JSON.stringify(options).replace(/<\//g, '<\\/');
 				const headerFooterData = await loadHeaderFooterData(req, res, options);
@@ -124,6 +120,14 @@ module.exports = function (middleware) {
 
 		next();
 	};
+
+	async function checkAPI(req, options, res) {
+		if (req.route && req.route.path === '/api/') {
+			options.title = '[[pages:home]]';
+		}
+		req.app.set('json spaces', global.env === 'development' || req.query.pretty ? 4 : 0);
+		return res.json(options);
+	}
 
 	async function getLoggedInUser(req) {
 		if (req.user) {
