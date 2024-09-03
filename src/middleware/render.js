@@ -121,6 +121,7 @@ module.exports = function (middleware) {
 		next();
 	};
 
+	// testing action workflow
 	async function checkAPI(req, options, res) {
 		if (req.route && req.route.path === '/api/') {
 			options.title = '[[pages:home]]';
@@ -151,10 +152,8 @@ module.exports = function (middleware) {
 		return null;
 	}
 
-	async function loadClientHeaderFooterData(req, res, options) {
-		const registrationType = meta.config.registrationType || 'normal';
-		res.locals.config = res.locals.config || {};
-		const templateValues = {
+	function initializeTemplateValues(res, options, registrationType) {
+		return {
 			title: meta.config.title || '',
 			'title:url': meta.config['title:url'] || '',
 			description: meta.config.description || '',
@@ -166,12 +165,29 @@ module.exports = function (middleware) {
 			allowRegistration: registrationType === 'normal',
 			searchEnabled: plugins.hooks.hasListeners('filter:search.query'),
 			postQueueEnabled: !!meta.config.postQueue,
-			registrationQueueEnabled: meta.config.registrationApprovalType !== 'normal' || (meta.config.registrationType === 'invite-only' || meta.config.registrationType === 'admin-invite-only'),
+			registrationQueueEnabled: meta.config.registrationApprovalType !== 'normal' 
+				|| (meta.config.registrationType === 'invite-only' || meta.config.registrationType === 'admin-invite-only'),
 			config: res.locals.config,
 			relative_path,
 			bodyClass: options.bodyClass,
 			widgets: options.widgets,
+			configJSON: jsesc(JSON.stringify(res.locals.config), { isScriptContext: true }),
+			useCustomCSS: meta.config.useCustomCSS && meta.config.customCSS,
+			customCSS: meta.config.useCustomCSS ? (meta.config.renderedCustomCSS || '') : '',
+			useCustomHTML: meta.config.useCustomHTML,
+			customHTML: meta.config.useCustomHTML ? meta.config.customHTML : '',
+			maintenanceHeader: meta.config.maintenanceMode && !results.isAdmin,
+			defaultLang: meta.config.defaultLang || 'en-GB',
+			userLang: res.locals.config.userLang,
 		};
+	}
+
+	async function loadClientHeaderFooterData(req, res, options) {
+		const registrationType = meta.config.registrationType || 'normal';
+		res.locals.config = res.locals.config || {};
+
+
+		const templateValues = initializeTemplateValues(res, options, registrationType);
 
 		templateValues.configJSON = jsesc(JSON.stringify(res.locals.config), { isScriptContext: true });
 
@@ -223,6 +239,7 @@ module.exports = function (middleware) {
 			navigation: results.navigation,
 			unreadData,
 		}));
+
 		templateValues.isAdmin = results.user.isAdmin;
 		templateValues.isGlobalMod = results.user.isGlobalMod;
 		templateValues.showModMenu = results.user.isAdmin || results.user.isGlobalMod || results.user.isMod;
