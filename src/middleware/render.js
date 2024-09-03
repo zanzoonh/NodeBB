@@ -85,7 +85,7 @@ module.exports = function (middleware) {
 				options._locals = undefined;
 
 				if (res.locals.isAPI) {
-					checkAPI(req, options, res)
+					checkAPI(req, options, res);
 				}
 				const optionsString = JSON.stringify(options).replace(/<\//g, '<\\/');
 				const headerFooterData = await loadHeaderFooterData(req, res, options);
@@ -152,7 +152,7 @@ module.exports = function (middleware) {
 		return null;
 	}
 
-	async function initializeTemplate (options){
+	async function initializeTemplate(options, res) {
 		const registrationType = meta.config.registrationType || 'normal';
 		res.locals.config = res.locals.config || {};
 		return {
@@ -173,10 +173,9 @@ module.exports = function (middleware) {
 			bodyClass: options.bodyClass,
 			widgets: options.widgets,
 		};
-
 	}
 	async function loadClientHeaderFooterData(req, res, options) {
-		const templateValues = initializeTemplate(options);
+		const templateValues = initializeTemplate(options, res);
 
 		templateValues.configJSON = jsesc(JSON.stringify(res.locals.config), { isScriptContext: true });
 
@@ -259,7 +258,6 @@ module.exports = function (middleware) {
 		}
 		return templateValues;
 	}
-	
 	async function loadAdminHeaderFooterData(req, res, options) {
 		const custom_header = {
 			plugins: [],
