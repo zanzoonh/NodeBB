@@ -176,56 +176,64 @@ module.exports = function (middleware) {
 	}
 	async function loadClientHeaderFooterData(req, res, options) {
 		const templateValues = initializeTemplate(options, res);
-
-		templateValues.configJSON = jsesc(JSON.stringify(res.locals.config), { isScriptContext: true });
-
-		const title = translator.unescape(utils.stripHTMLTags(options.title || ''));
-		const results = await utils.promiseParallel({
-			isAdmin: user.isAdministrator(req.uid),
-			isGlobalMod: user.isGlobalModerator(req.uid),
-			isModerator: user.isModeratorOfAnyCategory(req.uid),
-			privileges: privileges.global.get(req.uid),
-			blocks: user.blocks.list(req.uid),
-			user: user.getUserData(req.uid),
-			isEmailConfirmSent: req.uid <= 0 ? false : await user.email.isValidationPending(req.uid),
+		// Perform parallel operations
+		const results = await performParallelOperations(req.uid, res, options);
+		// Process user data
+		processUserData(results, req.uid);
+		// Update template values
+		updateTemplateValues(templateValues, results, req, options, res);
+		return templateValues;
+	}
+	// Helper function to perform parallel operations
+	async function performParallelOperations(uid, res, options) {
+		return await utils.promiseParallel({
+			isAdmin: user.isAdministrator(uid),
+			isGlobalMod: user.isGlobalModerator(uid),
+			isModerator: user.isModeratorOfAnyCategory(uid),
+			privileges: privileges.global.get(uid),
+			blocks: user.blocks.list(uid),
+			user: user.getUserData(uid),
+			isEmailConfirmSent: uid <= 0 ? false : await user.email.isValidationPending(uid),
 			languageDirection: translator.translate('[[language:dir]]', res.locals.config.userLang),
 			timeagoCode: languages.userTimeagoCode(res.locals.config.userLang),
-			browserTitle: translator.translate(controllersHelpers.buildTitle(title)),
-			navigation: navigation.get(req.uid),
-			roomIds: req.uid > 0 ? db.getSortedSetRevRange(`uid:${req.uid}:chat:rooms`, 0, 0) : [],
+			browserTitle: translator.translate(controllersHelpers.buildTitle(translator.unescape(utils.stripHTMLTags(options.title || '')))),
+			navigation: navigation.get(uid),
+			roomIds: uid > 0 ? db.getSortedSetRevRange(`uid:${uid}:chat:rooms`, 0, 0) : [],
 		});
-
+	}
+	// Helper function to process user data
+	function processUserData(results) {
 		const unreadData = {
 			'': {},
 			new: {},
 			watched: {},
 			unreplied: {},
 		};
-
-		results.user.unreadData = unreadData;
-		results.user.isAdmin = results.isAdmin;
-		results.user.isGlobalMod = results.isGlobalMod;
-		results.user.isMod = !!results.isModerator;
-		results.user.privileges = results.privileges;
-		results.user.blocks = results.blocks;
-		results.user.timeagoCode = results.timeagoCode;
-		results.user[results.user.status] = true;
-		results.user.lastRoomId = results.roomIds.length ? results.roomIds[0] : null;
-
-		results.user.email = String(results.user.email);
-		results.user['email:confirmed'] = results.user['email:confirmed'] === 1;
-		results.user.isEmailConfirmSent = !!results.isEmailConfirmSent;
-
-		templateValues.bootswatchSkin = res.locals.config.bootswatchSkin || '';
+		results.user = {
+			...results.user,
+			unreadData,
+			isAdmin: results.isAdmin,
+			isGlobalMod: results.isGlobalMod,
+			isMod: !!results.isModerator,
+			privileges: results.privileges,
+			blocks: results.blocks,
+			timeagoCode: results.timeagoCode,
+			[results.user.status]: true,
+			lastRoomId: results.roomIds.length ? results.roomIds[0] : null,
+			email: String(results.user.email),
+			'email:confirmed': results.user['email:confirmed'] === 1,
+			isEmailConfirmSent: !!results.isEmailConfirmSent,
+		};
+	}
+	// Helper function to update template values
+	async function updateTemplateValues(templateValues, results, req, options, res) {
+		templateValues.bootswatchSkin = meta.config.bootswatchSkin || '';
 		templateValues.browserTitle = results.browserTitle;
-		({
-			navigation: templateValues.navigation,
-			unreadCount: templateValues.unreadCount,
-		} = await appendUnreadCounts({
+		({ navigation: templateValues.navigation, unreadCount: templateValues.unreadCount } = await appendUnreadCounts({
 			uid: req.uid,
 			query: req.query,
 			navigation: results.navigation,
-			unreadData,
+			unreadData: results.user.unreadData,
 		}));
 		templateValues.isAdmin = results.user.isAdmin;
 		templateValues.isGlobalMod = results.user.isGlobalMod;
@@ -233,8 +241,7 @@ module.exports = function (middleware) {
 		templateValues.canChat = (results.privileges.chat || results.privileges['chat:privileged']) && meta.config.disableChat !== 1;
 		templateValues.user = results.user;
 		templateValues.userJSON = jsesc(JSON.stringify(results.user), { isScriptContext: true });
-		templateValues.useCustomCSS = meta.config.useCustomCSS && meta.config.customCSS;
-		templateValues.customCSS = templateValues.useCustomCSS ? (meta.config.renderedCustomCSS || '') : '';
+		templateValues.useCustomCSS = meta.config.useCustomCSS && meta.config.customCSS ? meta.config.renderedCustomCSS || '' : '';
 		templateValues.useCustomHTML = meta.config.useCustomHTML;
 		templateValues.customHTML = templateValues.useCustomHTML ? meta.config.customHTML : '';
 		templateValues.maintenanceHeader = meta.config.maintenanceMode && !results.isAdmin;
@@ -244,19 +251,14 @@ module.exports = function (middleware) {
 		if (req.query.noScriptMessage) {
 			templateValues.noScriptMessage = validator.escape(String(req.query.noScriptMessage));
 		}
-
-		templateValues.template = { name: res.locals.template };
-		templateValues.template[res.locals.template] = true;
-
+		templateValues.template = { name: res.locals.template, [res.locals.template]: true };
 		if (options.hasOwnProperty('_header')) {
 			templateValues.metaTags = options._header.tags.meta;
 			templateValues.linkTags = options._header.tags.link;
 		}
-
 		if (req.route && req.route.path === '/') {
 			modifyTitle(templateValues);
 		}
-		return templateValues;
 	}
 	async function loadAdminHeaderFooterData(req, res, options) {
 		const custom_header = {
@@ -459,32 +461,41 @@ module.exports = function (middleware) {
 		});
 
 		const { tidsByFilter } = results.unreadData;
-		navigation = navigation.map((item) => {
-			function modifyNavItem(item, route, filter, content) {
-				if (item && item.originalRoute === route) {
-					unreadData[filter] = _.zipObject(tidsByFilter[filter], tidsByFilter[filter].map(() => true));
-					item.content = content;
-					unreadCount.mobileUnread = content;
-					unreadCount.unreadUrl = route;
-					if (unreadCounts[filter] > 0) {
-						item.iconClass += ' unread-count';
-					}
+		// Helper function to modify navigation items
+		function modifyNavItem(item, route, filter, content, unreadData, unreadCount, unreadCounts) {
+			if (item && item.originalRoute === route) {
+				unreadData[filter] = _.zipObject(tidsByFilter[filter], tidsByFilter[filter].map(() => true));
+				item.content = content;
+				unreadCount.mobileUnread = content;
+				unreadCount.unreadUrl = route;
+				if (unreadCounts[filter] > 0) {
+					item.iconClass += ' unread-count';
 				}
 			}
-			modifyNavItem(item, '/unread', '', unreadCount.topic);
-			modifyNavItem(item, '/unread?filter=new', 'new', unreadCount.newTopic);
-			modifyNavItem(item, '/unread?filter=watched', 'watched', unreadCount.watchedTopic);
-			modifyNavItem(item, '/unread?filter=unreplied', 'unreplied', unreadCount.unrepliedTopic);
+		}
 
+		// Function to handle flags separately
+		function handleFlags(item, unreadCount) {
 			['flags'].forEach((prop) => {
 				if (item && item.originalRoute === `/${prop}` && unreadCount[prop] > 0) {
 					item.iconClass += ' unread-count';
 					item.content = unreadCount.flags;
 				}
 			});
+		}
 
+		// Refactored map function
+		navigation = navigation.map((item) => {
+			// Apply modifications for different routes and filters
+			modifyNavItem(item, '/unread', '', unreadCount.topic, unreadData, unreadCount, unreadCounts);
+			modifyNavItem(item, '/unread?filter=new', 'new', unreadCount.newTopic, unreadData, unreadCount, unreadCounts);
+			modifyNavItem(item, '/unread?filter=watched', 'watched', unreadCount.watchedTopic, unreadData, unreadCount, unreadCounts);
+			modifyNavItem(item, '/unread?filter=unreplied', 'unreplied', unreadCount.unrepliedTopic, unreadData, unreadCount, unreadCounts);
+			// Handle flags separately
+			handleFlags(item, unreadCount);
 			return item;
 		});
+
 
 		return { navigation, unreadCount };
 	}
