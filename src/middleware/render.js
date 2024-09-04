@@ -231,7 +231,7 @@ module.exports = function (middleware) {
 			navigation: results.navigation,
 			unreadData,
 		}));
-		populateTemplateValues(templateValues, results, req.query, options, res.locals.config);
+		populateTemplateValues(templateValues, results, res.locals.config);
 		if (req.query.noScriptMessage) {
 			templateValues.noScriptMessage = validator.escape(String(req.query.noScriptMessage));
 		}
