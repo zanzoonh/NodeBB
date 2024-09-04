@@ -462,33 +462,30 @@ module.exports = function (middleware) {
 		});
 
 		const { tidsByFilter } = results.unreadData;
-		navigation = navigation.map((item) => {
-			function modifyNavItem(item, route, filter, content) {
-				if (item && item.originalRoute === route) {
-					unreadData[filter] = _.zipObject(tidsByFilter[filter], tidsByFilter[filter].map(() => true));
-					item.content = content;
-					unreadCount.mobileUnread = content;
-					unreadCount.unreadUrl = route;
-					if (unreadCounts[filter] > 0) {
-						item.iconClass += ' unread-count';
-					}
+		function modifyNavItem(item, route, filter, content) {
+			if (item && item.originalRoute === route) {
+				unreadData[filter] = _.zipObject(tidsByFilter[filter], tidsByFilter[filter].map(() => true));
+				item.content = content;
+				unreadCount.mobileUnread = content;
+				unreadCount.unreadUrl = route;
+				if (unreadCounts[filter] > 0) {
+					item.iconClass += ' unread-count';
 				}
 			}
+		}
+		navigation = navigation.map((item) => {
 			modifyNavItem(item, '/unread', '', unreadCount.topic);
 			modifyNavItem(item, '/unread?filter=new', 'new', unreadCount.newTopic);
 			modifyNavItem(item, '/unread?filter=watched', 'watched', unreadCount.watchedTopic);
 			modifyNavItem(item, '/unread?filter=unreplied', 'unreplied', unreadCount.unrepliedTopic);
-
 			['flags'].forEach((prop) => {
 				if (item && item.originalRoute === `/${prop}` && unreadCount[prop] > 0) {
 					item.iconClass += ' unread-count';
 					item.content = unreadCount.flags;
 				}
 			});
-
 			return item;
 		});
-
 		return { navigation, unreadCount };
 	}
 
